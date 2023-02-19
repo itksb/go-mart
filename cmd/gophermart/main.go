@@ -19,7 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer application.Close()
-	log.Fatal(application.Run())
 
+	log.Fatal(application.Run())
+	defer application.Close()
 }

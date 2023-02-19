@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"github.com/itksb/go-mart/internal/config"
 	"github.com/itksb/go-mart/internal/handler"
 	"github.com/itksb/go-mart/internal/router"
@@ -19,13 +20,20 @@ type App struct {
 }
 
 func NewApp(cfg config.Config) (*App, error) {
+	if cfg.AppHost == "" {
+		return nil, errors.New("Wrong configuration. AppHost is empty.")
+	}
+	if cfg.DatabaseURI == "" {
+		return nil, errors.New("Wrong configuration. DatabaseURI is empty.")
+	}
+
 	logger, err := zap.NewProduction()
 	if err != nil {
 		return nil, err
 	}
 	defer logger.Sync() // flushes buffer, if any
 	sugar := logger.Sugar()
-	sugar.Infof("logger created")
+	sugar.Infof("zap logger created")
 
 	h := handler.NewHandler(sugar, cfg)
 
@@ -36,7 +44,7 @@ func NewApp(cfg config.Config) (*App, error) {
 	}
 
 	srv := &http.Server{
-		Addr:         cfg.RunAddress,
+		Addr:         cfg.GetFullAddr(),
 		Handler:      routeHandler,
 		WriteTimeout: 15 * time.Second,
 	}

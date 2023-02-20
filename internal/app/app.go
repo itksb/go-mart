@@ -57,7 +57,7 @@ func NewApp(cfg config.Config) (*App, error) {
 
 // Run - run the application instance
 func (app *App) Run() error {
-	app.logger.Infof("server started", "addr", app.HTTPServer.Addr)
+	app.logger.Infof("server started: %s", app.HTTPServer.Addr)
 	return app.HTTPServer.ListenAndServe()
 }
 

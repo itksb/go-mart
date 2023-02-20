@@ -16,8 +16,14 @@ func NewRouter(
 	// auth middleware here...
 	r.Use(gzipMiddleware)
 
-	// apply CORS middleware for api routes
-	r.Use(NewCors())
+	r.Route("/api/user", func(r2 chi.Router) {
+		// apply CORS middleware for api routes
+		r2.Use(NewCors())
 
+		r2.Post("/register", h.APIAuthRegister)
+
+	})
+
+	r.MethodFunc(http.MethodGet, "/health", h.HealthCheck)
 	return r, nil
 }

@@ -5,6 +5,9 @@ import (
 	"github.com/itksb/go-mart/internal/config"
 	"github.com/itksb/go-mart/internal/handler"
 	"github.com/itksb/go-mart/internal/router"
+	"github.com/itksb/go-mart/internal/service/auth"
+	"github.com/itksb/go-mart/internal/service/auth/token"
+	"github.com/itksb/go-mart/internal/storage/dbpgsql"
 	"github.com/itksb/go-mart/pkg/logger"
 	"go.uber.org/zap"
 	"io"
@@ -15,6 +18,7 @@ import (
 type App struct {
 	HTTPServer *http.Server
 	logger     logger.Interface
+	auth       *auth.Service
 
 	io.Closer
 }
@@ -49,9 +53,45 @@ func NewApp(cfg config.Config) (*App, error) {
 		WriteTimeout: 15 * time.Second,
 	}
 
+	db, err := dbpgsql.NewPostgres(cfg.DatabaseURI, sugar)
+	if err != nil {
+		sugar.Errorf("unable connect to postgres: %s", err.Error())
+		return nil, err
+	}
+
+	identityProvider, err := dbpgsql.NewIdentityPostgres(db)
+	if err != nil {
+		sugar.Errorf("unable create identity provider: %s", err.Error())
+		return nil, err
+	}
+
+	hashAlgo, err := auth.NewHashAlgoBcrypt()
+	if err != nil {
+		sugar.Errorf("unable initialize hash algo module: %s", err.Error())
+		return nil, err
+	}
+
+	authService, err := auth.NewAuthService(auth.Opts{
+		IdentityProvider: identityProvider,
+		Logger:           sugar,
+		HashAlgo:         hashAlgo,
+		TokenCreate:      token.CreateToken,
+		TokenParse:       token.ParseWithClaims,
+		SecretReader: token.SecretFunc(func() (string, error) {
+			return cfg.AppSecret, nil
+		}),
+		NowTime: time.Now,
+	})
+
+	if err != nil {
+		sugar.Errorf("unable to initialize auth service: %s", err.Error())
+		return nil, err
+	}
+
 	return &App{
 		HTTPServer: srv,
 		logger:     sugar,
+		auth:       authService,
 	}, nil
 }
 

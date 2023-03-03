@@ -13,6 +13,7 @@ type Config struct {
 	AppPort              int    // ОС `RUN_ADDRESS` или флаг `-a`
 	DatabaseURI          string // ОС `DATABASE_URI` или флаг `-d`
 	AccrualSystemAddress string // ОС `ACCRUAL_SYSTEM_ADDRESS` или флаг `-r`
+	AppSecret            string
 }
 
 func NewConfig() (Config, error) {
@@ -21,6 +22,7 @@ func NewConfig() (Config, error) {
 		AppPort:              8080,
 		DatabaseURI:          "",
 		AccrualSystemAddress: "",
+		AppSecret:            "demo.demo.demo",
 	}
 
 	return cfg, nil

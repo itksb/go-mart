@@ -12,7 +12,6 @@ import (
 // 400 — неверный формат запроса;
 // 409 — логин уже занят;
 // 500 — внутренняя ошибка сервера.
-// APIShortenURL -.
 func (h *Handler) APIAuthRegister(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	reqBytes, err := io.ReadAll(r.Body)

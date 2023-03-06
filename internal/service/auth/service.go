@@ -9,7 +9,7 @@ import (
 )
 
 type Service struct {
-	identity     IdentityInterface
+	identity     IdentityProviderInterface
 	log          logger.Interface
 	hashAlgo     HashAlgoInterface
 	tokenCreate  token.CreateTokenFunc
@@ -19,7 +19,7 @@ type Service struct {
 }
 
 type Opts struct {
-	IdentityProvider IdentityInterface
+	IdentityProvider IdentityProviderInterface
 	Logger           logger.Interface
 	HashAlgo         HashAlgoInterface
 	TokenCreate      token.CreateTokenFunc
@@ -27,6 +27,8 @@ type Opts struct {
 	SecretReader     token.Secret
 	NowTime          func() time.Time
 }
+
+const HashAlgoDefaultCost = 10
 
 func NewAuthService(opts Opts) (*Service, error) {
 	if opts.IdentityProvider == nil {
@@ -64,8 +66,6 @@ func NewAuthService(opts Opts) (*Service, error) {
 	}, nil
 }
 
-const HashAlgoDefaultCost = 10
-
 func (s *Service) SignUp(ctx context.Context, cred ClientCredential) (newToken string, err error) {
 	// it is nothing criminal to validate input data twice: in controller layer and here in service
 	if _, err := validation.ValidatePassword(cred.Password); err != nil {
@@ -83,17 +83,15 @@ func (s *Service) SignUp(ctx context.Context, cred ClientCredential) (newToken s
 		return "", err
 	}
 
-	identUser, err := s.identity.Create(ctx, cred.Login, string(hash))
+	identUser, err := s.identity.Create(ctx, IdentityParamsCreate{login: cred.Login, passHash: string(hash)})
 	if err != nil {
 		s.log.Errorf("identity creation error. Err: %s", err.Error())
 		return "", err
 	}
 
 	newToken, err = s.tokenCreate(
-		&token.MartClaims{
-			UserID:    identUser.ID,
-			ExpiresAt: s.now().Add(24 * time.Hour),
-		}, s.secretReader)
+		&token.MartClaims{UserID: identUser.ID, ExpiresAt: s.now().Add(24 * time.Hour)},
+		s.secretReader)
 	if err != nil {
 		s.log.Errorf("token creating fails. Err: %s", err.Error())
 		return "", err
@@ -113,7 +111,7 @@ func (s *Service) SignIn(ctx context.Context, cred ClientCredential) (newToken s
 		return "", err
 	}
 
-	identUser, err := s.identity.FindOne(ctx, cred.Login, "")
+	identUser, err := s.identity.FindOne(ctx, IdentityParamsFindOne{login: cred.Login})
 	if err != nil {
 		s.log.Infof("login %s not found. Error: %s", cred.Login, err.Error())
 		return "", ErrInvalidCredentials

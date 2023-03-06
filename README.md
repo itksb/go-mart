@@ -18,3 +18,11 @@ git fetch template && git checkout template/master .github
 
 Затем добавьте полученные изменения в свой репозиторий.
 .github/workflows/gophermart.yml
+
+# Миграции
+
+Создать:
+
+```shell
+goose postgres "host=localhost user=user password=password dbname=postgres sslmode=disable" status
+```

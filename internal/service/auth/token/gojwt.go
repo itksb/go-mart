@@ -10,7 +10,7 @@ type customClaims struct {
 	jwt.RegisteredClaims
 }
 
-func CreateToken(martClaims *MartClaims, secretReader Secret) (token string, err error) {
+func CreateToken(martClaims *MartClaims, secretReader Secret, timeNow func() time.Time) (token string, err error) {
 	signingKey, err := secretReader.Get()
 	if err != nil {
 		return "", err
@@ -21,8 +21,8 @@ func CreateToken(martClaims *MartClaims, secretReader Secret) (token string, err
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "go-mart",
 			ExpiresAt: jwt.NewNumericDate(martClaims.ExpiresAt),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(timeNow()),
+			IssuedAt:  jwt.NewNumericDate(timeNow()),
 			ID:        "",
 		},
 	}

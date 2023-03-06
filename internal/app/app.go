@@ -1,50 +1,179 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"github.com/itksb/go-mart/internal/config"
 	"github.com/itksb/go-mart/internal/handler"
 	"github.com/itksb/go-mart/internal/router"
 	"github.com/itksb/go-mart/internal/service/auth"
 	"github.com/itksb/go-mart/internal/service/auth/token"
-	"github.com/itksb/go-mart/internal/storage/dbpgsql"
+	"github.com/itksb/go-mart/internal/storage/pgidentity"
+	"github.com/itksb/go-mart/migrate"
 	"github.com/itksb/go-mart/pkg/logger"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"net/http"
 	"time"
+
+	//Under the hood, the driver registers itself as being available to the database/sql package,
+	//but in general nothing else happens with the exception that the init function is run.
+	_ "github.com/lib/pq"
 )
 
+type OnCloseCallback func(a *App)
+
 type App struct {
-	HTTPServer *http.Server
-	logger     logger.Interface
-	auth       *auth.Service
+	httpServer               *http.Server
+	logger                   logger.Interface
+	auth                     *auth.Service
+	onCloseCallbacks         []OnCloseCallback
+	db                       *sqlx.DB
+	gracefulShutdownInterval time.Duration //seconds
+	closed                   bool
+	dsn                      string
 
 	io.Closer
 }
 
+func (a *App) AddOnCloseCallback(clbck OnCloseCallback) {
+	a.onCloseCallbacks = append(a.onCloseCallbacks, clbck)
+}
+
 func NewApp(cfg config.Config) (*App, error) {
-	if cfg.AppHost == "" {
-		return nil, errors.New("Wrong configuration. AppHost is empty.")
+	app := &App{
+		onCloseCallbacks: make([]OnCloseCallback, 0),
 	}
+	defer app.onClose()
+
+	err := app.setupLogger(&cfg)
+	if err != nil {
+		return nil, err
+	}
+	app.logger.Infof("logger created")
+
+	err = app.setupServer(&cfg)
+	if err != nil {
+		return nil, err
+	}
+	app.logger.Infof("http server created")
+
+	err = app.setupAuthService(&cfg)
+	if err != nil {
+		return nil, err
+	}
+	app.logger.Infof("auth service created")
+
+	app.gracefulShutdownInterval = cfg.GracefulShutdownInterval
+	app.closed = false
+
 	if cfg.DatabaseURI == "" {
-		return nil, errors.New("Wrong configuration. DatabaseURI is empty.")
+		return nil, config.ErrConfigDatabaseURIEmpty
+	}
+	app.dsn = cfg.DatabaseURI
+
+	return app, nil
+}
+
+// Run - run the application instance
+func (app *App) Run(sigCtx context.Context) error {
+
+	// run migrations
+	err := migrate.Migrate(app.dsn, migrate.Migrations)
+	if err != nil {
+		app.logger.Errorf("migration error: %s", err.Error())
+		return err
 	}
 
-	logger, err := zap.NewProduction()
+	err = app.connectDb(sigCtx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer logger.Sync() // flushes buffer, if any
-	sugar := logger.Sugar()
-	sugar.Infof("zap logger created")
 
-	h := handler.NewHandler(sugar, cfg)
+	group, groupCtx := errgroup.WithContext(sigCtx)
+	// run the server
+	group.Go(func() error {
+		app.logger.Infof("server is starting: %s", app.httpServer.Addr)
+		/**
+		When Shutdown is called, Serve, ListenAndServe, and
+		ListenAndServeTLS immediately return ErrServerClosed. Make sure the
+		program doesn't exit and waits instead for Shutdown to return.
+		*/
+		err := app.httpServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			app.logger.Errorf("failed to start server at %s. Error: %s", app.httpServer.Addr, err.Error())
+		}
+		return err
+	})
 
-	routeHandler, err := router.NewRouter(h, sugar)
+	// graceful shutdown the web server
+	group.Go(func() error {
+		<-groupCtx.Done()
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(app.gracefulShutdownInterval)*time.Second)
+		defer cancel()
+		app.logger.Infof("shutting down the server...")
+		err := app.httpServer.Shutdown(timeoutCtx)
+		if err != nil {
+			app.logger.Errorf("failed to shutdown the server %s. Error: %s", app.httpServer.Addr, err.Error())
+		}
+		return err
+	})
+
+	defer app.onClose()
+	return group.Wait()
+}
+
+// Close -
+func (app *App) Close() error {
+	app.onClose()
+	return nil
+}
+
+func (app *App) onClose() {
+	if app.closed {
+		return
+	}
+	for _, clbk := range app.onCloseCallbacks {
+		clbk(app)
+	}
+	app.closed = true
+}
+
+func (a *App) setupLogger(cfg *config.Config) error {
+	var appLogger *zap.Logger
+	var err error
+
+	switch cfg.Env {
+	case config.Debug:
+		appLogger, err = zap.NewDevelopment()
+	case config.Prod:
+		appLogger, err = zap.NewProduction()
+	default:
+		return config.ErrConfigWrongEnvValue
+	}
+
+	a.logger = appLogger.Sugar()
+
+	a.AddOnCloseCallback(func(a *App) {
+		a.logger.(*zap.SugaredLogger).Sync()
+	})
+
+	return err
+
+}
+
+func (app *App) setupServer(cfg *config.Config) error {
+	if cfg.AppHost == "" {
+		return config.ErrConfigAppHostIsEmpty
+	}
+
+	h := handler.NewHandler(app.logger, *cfg)
+	routeHandler, err := router.NewRouter(h, app.logger)
 	if err != nil {
-		sugar.Errorf("Router creating error: %s", err.Error())
-		return nil, err
+		app.logger.Errorf("Router creating error: %s", err.Error())
+		return err
 	}
 
 	srv := &http.Server{
@@ -53,30 +182,49 @@ func NewApp(cfg config.Config) (*App, error) {
 		WriteTimeout: 15 * time.Second,
 	}
 
-	db, err := dbpgsql.NewPostgres(cfg.DatabaseURI, sugar)
-	if err != nil {
-		sugar.Errorf("unable connect to postgres: %s", err.Error())
-		return nil, err
+	app.httpServer = srv
+
+	return nil
+}
+
+func (app *App) connectDb(ctx context.Context) error {
+	if app.dsn == "" {
+		return config.ErrConfigDatabaseURIEmpty
 	}
 
-	identityProvider, err := dbpgsql.NewIdentityPostgres(db)
+	// this Pings the database trying to connect
+	db, err := sqlx.ConnectContext(ctx, "postgres", app.dsn)
 	if err != nil {
-		sugar.Errorf("unable create identity provider: %s", err.Error())
-		return nil, err
+		app.logger.Errorf("database connection error %s", err.Error())
+		return err
+	}
+	app.AddOnCloseCallback(func(a *App) { a.db.Close() })
+	app.db = db
+
+	return nil
+}
+
+func (app *App) setupAuthService(cfg *config.Config) error {
+	identityProvider, err := pgidentity.NewIdentityPostgres(app.db)
+	if err != nil {
+		app.logger.Errorf("unable create identity provider: %s", err.Error())
+		return err
 	}
 
 	hashAlgo, err := auth.NewHashAlgoBcrypt()
 	if err != nil {
-		sugar.Errorf("unable initialize hash algo module: %s", err.Error())
-		return nil, err
+		app.logger.Errorf("unable initialize hash algo module: %s", err.Error())
+		return err
 	}
 
 	authService, err := auth.NewAuthService(auth.Opts{
 		IdentityProvider: identityProvider,
-		Logger:           sugar,
+		Logger:           app.logger,
 		HashAlgo:         hashAlgo,
-		TokenCreate:      token.CreateToken,
-		TokenParse:       token.ParseWithClaims,
+		TokenCreate: func(martClaims *token.MartClaims, secretReader token.Secret) (newToken string, err error) {
+			return token.CreateToken(martClaims, secretReader, time.Now)
+		},
+		TokenParse: token.ParseWithClaims,
 		SecretReader: token.SecretFunc(func() (string, error) {
 			return cfg.AppSecret, nil
 		}),
@@ -84,24 +232,11 @@ func NewApp(cfg config.Config) (*App, error) {
 	})
 
 	if err != nil {
-		sugar.Errorf("unable to initialize auth service: %s", err.Error())
-		return nil, err
+		app.logger.Errorf("unable to initialize auth service: %s", err.Error())
+		return err
 	}
 
-	return &App{
-		HTTPServer: srv,
-		logger:     sugar,
-		auth:       authService,
-	}, nil
-}
+	app.auth = authService
 
-// Run - run the application instance
-func (app *App) Run() error {
-	app.logger.Infof("server started: %s", app.HTTPServer.Addr)
-	return app.HTTPServer.ListenAndServe()
-}
-
-// Close -
-func (app *App) Close() error {
 	return nil
 }

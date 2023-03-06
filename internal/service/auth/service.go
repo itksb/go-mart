@@ -137,3 +137,7 @@ func (s *Service) SignIn(ctx context.Context, cred ClientCredential) (newToken s
 
 	return newToken, nil
 }
+
+func (s *Service) ParseWithClaims(tokenString string, martClaims *token.MartClaims) error {
+	return token.ParseWithClaims(tokenString, martClaims, s.secretReader)
+}

@@ -35,6 +35,7 @@ type App struct {
 	closed                   bool
 	dsn                      string
 	appSecret                string
+	cfg                      *config.Config
 
 	io.Closer
 }
@@ -55,12 +56,6 @@ func NewApp(cfg config.Config) (*App, error) {
 	}
 	app.logger.Infof("logger created")
 
-	err = app.setupServer(&cfg)
-	if err != nil {
-		return nil, err
-	}
-	app.logger.Infof("http server created")
-
 	app.gracefulShutdownInterval = cfg.GracefulShutdownInterval
 	app.closed = false
 
@@ -69,6 +64,8 @@ func NewApp(cfg config.Config) (*App, error) {
 	}
 	app.dsn = cfg.DatabaseURI
 	app.appSecret = cfg.AppSecret
+
+	app.cfg = &cfg
 
 	return app, nil
 }
@@ -93,6 +90,12 @@ func (app *App) Run(sigCtx context.Context) error {
 		return err
 	}
 	app.logger.Infof("auth service created")
+
+	err = app.setupServer()
+	if err != nil {
+		return err
+	}
+	app.logger.Infof("http server created")
 
 	group, groupCtx := errgroup.WithContext(sigCtx)
 	// run the server
@@ -166,20 +169,20 @@ func (a *App) setupLogger(cfg *config.Config) error {
 
 }
 
-func (app *App) setupServer(cfg *config.Config) error {
-	if cfg.AppHost == "" {
+func (app *App) setupServer() error {
+	if app.cfg.AppHost == "" {
 		return config.ErrConfigAppHostIsEmpty
 	}
 
-	h := handler.NewHandler(app.logger, *cfg)
-	routeHandler, err := router.NewRouter(h, app.logger)
+	h := handler.NewHandler(app.logger, *app.cfg, app.auth)
+	routeHandler, err := router.NewRouter(h, app.logger, app.auth)
 	if err != nil {
 		app.logger.Errorf("Router creating error: %s", err.Error())
 		return err
 	}
 
 	srv := &http.Server{
-		Addr:         cfg.GetFullAddr(),
+		Addr:         app.cfg.GetFullAddr(),
 		Handler:      routeHandler,
 		WriteTimeout: 15 * time.Second,
 	}

@@ -26,3 +26,8 @@ git fetch template && git checkout template/master .github
 ```shell
 goose postgres "host=localhost user=user password=password dbname=postgres sslmode=disable" status
 ```
+
+# CURL
+
+curl -i -X POST -d '{"login": "legat", "password": "legat"}' http://localhost:8000/api/user/register
+curl -i -X POST -d '{"login": "legat", "password": "legat"}' http://localhost:8000/api/user/login

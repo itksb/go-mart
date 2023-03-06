@@ -57,12 +57,13 @@ func NewAuthService(opts Opts) (*Service, error) {
 	}
 
 	return &Service{
-		identity:    opts.IdentityProvider,
-		log:         opts.Logger,
-		hashAlgo:    opts.HashAlgo,
-		tokenCreate: opts.TokenCreate,
-		tokenParse:  opts.TokenParse,
-		now:         opts.NowTime,
+		identity:     opts.IdentityProvider,
+		log:          opts.Logger,
+		hashAlgo:     opts.HashAlgo,
+		tokenCreate:  opts.TokenCreate,
+		tokenParse:   opts.TokenParse,
+		secretReader: opts.SecretReader,
+		now:          opts.NowTime,
 	}, nil
 }
 
@@ -73,7 +74,7 @@ func (s *Service) SignUp(ctx context.Context, cred ClientCredential) (newToken s
 		return "", err
 	}
 	if _, err := validation.ValidateLogin(cred.Login); err != nil {
-		s.log.Infof("login validation fails. Err: %s", err.Error())
+		s.log.Infof("Login validation fails. Err: %s", err.Error())
 		return "", err
 	}
 
@@ -83,7 +84,7 @@ func (s *Service) SignUp(ctx context.Context, cred ClientCredential) (newToken s
 		return "", err
 	}
 
-	identUser, err := s.identity.Create(ctx, IdentityParamsCreate{login: cred.Login, passHash: string(hash)})
+	identUser, err := s.identity.Create(ctx, IdentityParamsCreate{Login: cred.Login, PassHash: string(hash)})
 	if err != nil {
 		s.log.Errorf("identity creation error. Err: %s", err.Error())
 		return "", err
@@ -107,19 +108,19 @@ func (s *Service) SignIn(ctx context.Context, cred ClientCredential) (newToken s
 		return "", err
 	}
 	if _, err := validation.ValidateLogin(cred.Login); err != nil {
-		s.log.Infof("login validation fails. Err: %s", err.Error())
+		s.log.Infof("Login validation fails. Err: %s", err.Error())
 		return "", err
 	}
 
-	identUser, err := s.identity.FindOne(ctx, IdentityParamsFindOne{login: cred.Login})
+	identUser, err := s.identity.FindOne(ctx, IdentityParamsFindOne{Login: cred.Login})
 	if err != nil {
-		s.log.Infof("login %s not found. Error: %s", cred.Login, err.Error())
+		s.log.Infof("Login %s not found. Error: %s", cred.Login, err.Error())
 		return "", ErrInvalidCredentials
 	}
 
 	err = s.hashAlgo.CompareHashAndPassword([]byte(identUser.PasswordHash), []byte(cred.Password))
 	if err != nil {
-		s.log.Infof("password for login %s is wrong. Err: %s", cred.Login, err.Error())
+		s.log.Infof("password for Login %s is wrong. Err: %s", cred.Login, err.Error())
 		return "", ErrInvalidCredentials
 	}
 

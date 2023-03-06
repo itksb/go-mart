@@ -27,7 +27,7 @@ func CreateToken(martClaims *MartClaims, secretReader Secret, timeNow func() tim
 		},
 	}
 	tkn := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return tkn.SignedString(signingKey)
+	return tkn.SignedString([]byte(signingKey))
 }
 
 func ParseWithClaims(tokenString string, martClaims *MartClaims, secretReader Secret) error {

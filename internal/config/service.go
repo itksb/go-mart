@@ -34,7 +34,7 @@ func NewConfig() (Config, error) {
 		AppPort:                  8080,
 		DatabaseURI:              "",
 		AccrualSystemAddress:     "",
-		AppSecret:                "demo.demo.demo",
+		AppSecret:                "1234567890",
 		Env:                      Prod,
 		GracefulShutdownInterval: 5, //seconds
 	}

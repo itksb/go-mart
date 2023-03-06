@@ -8,7 +8,7 @@ import (
 	"github.com/itksb/go-mart/internal/router"
 	"github.com/itksb/go-mart/internal/service/auth"
 	"github.com/itksb/go-mart/internal/service/auth/token"
-	"github.com/itksb/go-mart/internal/storage/pgidentity"
+	"github.com/itksb/go-mart/internal/storage/pg"
 	"github.com/itksb/go-mart/migrate"
 	"github.com/itksb/go-mart/pkg/logger"
 	"github.com/jmoiron/sqlx"
@@ -34,6 +34,7 @@ type App struct {
 	gracefulShutdownInterval time.Duration //seconds
 	closed                   bool
 	dsn                      string
+	appSecret                string
 
 	io.Closer
 }
@@ -60,12 +61,6 @@ func NewApp(cfg config.Config) (*App, error) {
 	}
 	app.logger.Infof("http server created")
 
-	err = app.setupAuthService(&cfg)
-	if err != nil {
-		return nil, err
-	}
-	app.logger.Infof("auth service created")
-
 	app.gracefulShutdownInterval = cfg.GracefulShutdownInterval
 	app.closed = false
 
@@ -73,6 +68,7 @@ func NewApp(cfg config.Config) (*App, error) {
 		return nil, config.ErrConfigDatabaseURIEmpty
 	}
 	app.dsn = cfg.DatabaseURI
+	app.appSecret = cfg.AppSecret
 
 	return app, nil
 }
@@ -80,7 +76,7 @@ func NewApp(cfg config.Config) (*App, error) {
 // Run - run the application instance
 func (app *App) Run(sigCtx context.Context) error {
 
-	// run migrations
+	// run migrations (from embedded fs)
 	err := migrate.Migrate(app.dsn, migrate.Migrations)
 	if err != nil {
 		app.logger.Errorf("migration error: %s", err.Error())
@@ -91,6 +87,12 @@ func (app *App) Run(sigCtx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	err = app.setupAuthService()
+	if err != nil {
+		return err
+	}
+	app.logger.Infof("auth service created")
 
 	group, groupCtx := errgroup.WithContext(sigCtx)
 	// run the server
@@ -204,8 +206,8 @@ func (app *App) connectDb(ctx context.Context) error {
 	return nil
 }
 
-func (app *App) setupAuthService(cfg *config.Config) error {
-	identityProvider, err := pgidentity.NewIdentityPostgres(app.db)
+func (app *App) setupAuthService() error {
+	identityProvider, err := pg.NewIdentityProviderPg(app.db)
 	if err != nil {
 		app.logger.Errorf("unable create identity provider: %s", err.Error())
 		return err
@@ -226,7 +228,7 @@ func (app *App) setupAuthService(cfg *config.Config) error {
 		},
 		TokenParse: token.ParseWithClaims,
 		SecretReader: token.SecretFunc(func() (string, error) {
-			return cfg.AppSecret, nil
+			return app.appSecret, nil
 		}),
 		NowTime: time.Now,
 	})

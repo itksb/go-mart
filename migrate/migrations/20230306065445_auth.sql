@@ -1,15 +1,17 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE
+EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE  users (
-    id uuid primary key default uuid_generate_v4() not null,
-    login character varying(100) not null,
-    password_hash character varying(100) not null,
-    balance decimal(10, 2) default 0,
-    created_at timestamp default now() not null,
-    constraint users_unique_login unique (login)
-    );
+CREATE TABLE users
+(
+    id            uuid PRIMARY KEY default uuid_generate_v4() NOT NULL,
+    login         character varying(60)                       NOT NULL,
+    password_hash character varying(80)                       NOT NULL,
+    balance       decimal(10, 2)                              NOT NULL DEFAULT 0,
+    created_at    timestamp        default now()              NOT NULL,
+    constraint users_login_unq_ct unique (login)
+);
 -- +goose StatementEnd
 
 -- +goose Down

@@ -12,7 +12,7 @@ func extractRunAddress(addrIn string) (string, int, error) {
 	var err error
 	if len(parts) == 2 {
 		host = parts[0]
-		_, err := fmt.Sscan(parts[1], &port)
+		_, err = fmt.Sscan(parts[1], &port)
 		if err != nil {
 			err = fmt.Errorf("PORT value is invalid: %v. Error: %s", parts[1], err.Error())
 		}

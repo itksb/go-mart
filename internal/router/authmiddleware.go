@@ -9,7 +9,9 @@ import (
 	"strings"
 )
 
-const ctxUser string = "user_id"
+type ctxUserID string
+
+const ctxUser ctxUserID = "user_id"
 
 // NewAuthMiddleware - setup user context
 // see examples: https://bash-shell.net/blog/dependency-injection-golang-http-middleware/

@@ -78,10 +78,14 @@ func (r *OrderRepositoryPg) FindAllByUserID(ctx context.Context, ID string) ([]*
 		"SELECT id, accrual, status, user_id, uploaded_at FROM orders WHERE user_id=$1 ORDER BY uploaded_at DESC",
 		ID,
 	)
-
 	if err != nil {
 		return nil, err
 	}
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+
 	defer rows.Close()
 	for rows.Next() {
 		order := &domain.Order{}

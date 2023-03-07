@@ -77,6 +77,10 @@ func (w *WithdrawRepositoryPg) FindAllByUserID(ctx context.Context, userID strin
 	if err != nil {
 		return nil, err
 	}
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
 
 	defer rows.Close()
 

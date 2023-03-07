@@ -43,5 +43,5 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Fatal(application.Run(ctx))
+	log.Println(application.Run(ctx))
 }

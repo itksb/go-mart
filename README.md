@@ -1,12 +1,6 @@
-# go-musthave-diploma-tpl
+# go-mart
 
-Шаблон репозитория для индивидуального дипломного проекта курса «Go-разработчик»
-
-# Начало работы
-
-1. Склонируйте репозиторий в любую подходящую директорию на вашем компьютере.
-2. В корне репозитория выполните команду `go mod init <name>` (где `<name>` — адрес вашего репозитория на GitHub без
-   префикса `https://`) для создания модуля
+Проект HTTP API "Накопительная система лояльности"
 
 # Обновление шаблона
 
@@ -23,3 +17,20 @@ git fetch template && git checkout template/master .github
 ```
 
 Затем добавьте полученные изменения в свой репозиторий.
+.github/workflows/gophermart.yml
+
+# Миграции
+
+Создать:
+
+```shell
+goose postgres "host=localhost user=user password=password dbname=postgres sslmode=disable" status
+```
+
+# CURL
+
+curl -i -X POST -d '{"login": "legat", "password": "legat"}' http://localhost:8000/api/user/register
+curl -i -X POST -d '{"login": "legat", "password": "legat"}' http://localhost:8000/api/user/login
+
+curl -i -X POST -d 18 -H "Authorization: Bearer YOUR TOKEN HERE" http://localhost:8000/api/user/orders
+curl -i  -H "Authorization: Bearer TOKEN" http://localhost:8000/api/user/withdrawals

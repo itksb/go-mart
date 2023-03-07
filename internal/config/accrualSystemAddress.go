@@ -13,7 +13,7 @@ func (cfg *Config) envAccrualSystemAddress() {
 }
 
 func (cfg *Config) flagAccrualSystemAddress() {
-	addr := flag.String("r", cfg.AppHost, "ACCRUAL_SYSTEM_ADDRESS")
+	addr := flag.String("r", cfg.AccrualSystemAddress, "ACCRUAL_SYSTEM_ADDRESS")
 	if addr != nil {
 		cfg.AccrualSystemAddress = *addr
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/itksb/go-mart/internal/service/order"
 	"github.com/itksb/go-mart/internal/service/withdraw"
 	"github.com/itksb/go-mart/internal/storage/pg"
+	"github.com/itksb/go-mart/internal/worker"
 	"github.com/itksb/go-mart/migrate"
 	"github.com/itksb/go-mart/pkg/logger"
 	"github.com/jmoiron/sqlx"
@@ -37,6 +38,7 @@ type App struct {
 	balanceService           *balance.Service
 	onCloseCallbacks         []OnCloseCallback
 	db                       *sqlx.DB
+	worker                   *worker.AccrualWorker
 	gracefulShutdownInterval time.Duration //seconds
 	closed                   bool
 	dsn                      string
@@ -103,6 +105,16 @@ func (a *App) Run(sigCtx context.Context) error {
 	}
 	a.logger.Infof("domain services created")
 
+	workerStorage, err := worker.NewWorkerStorage(a.db)
+	if err != nil {
+		return err
+	}
+	accWorker, err := worker.NewAccrualWorker(a.cfg.AccrualSystemAddress, workerStorage, a.logger)
+	if err != nil {
+		return err
+	}
+	a.worker = accWorker
+
 	err = a.setupServer()
 	if err != nil {
 		return err
@@ -123,6 +135,10 @@ func (a *App) Run(sigCtx context.Context) error {
 			a.logger.Errorf("failed to start server at %s. Error: %s", a.httpServer.Addr, err.Error())
 		}
 		return err
+	})
+
+	group.Go(func() error {
+		return a.worker.Run(groupCtx)
 	})
 
 	// graceful shutdown the web server

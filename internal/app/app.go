@@ -77,50 +77,50 @@ func NewApp(cfg config.Config) (*App, error) {
 }
 
 // Run - run the application instance
-func (app *App) Run(sigCtx context.Context) error {
+func (a *App) Run(sigCtx context.Context) error {
 
 	// run migrations (from embedded fs)
-	err := migrate.Migrate(app.dsn, migrate.Migrations)
+	err := migrate.Migrate(a.dsn, migrate.Migrations)
 	if err != nil {
-		app.logger.Errorf("migration error: %s", err.Error())
+		a.logger.Errorf("migration error: %s", err.Error())
 		return err
 	}
 
-	err = app.connectDb(sigCtx)
+	err = a.connectDB(sigCtx)
 	if err != nil {
 		return err
 	}
 
-	err = app.setupAuthService()
+	err = a.setupAuthService()
 	if err != nil {
 		return err
 	}
-	app.logger.Infof("auth service created")
+	a.logger.Infof("auth service created")
 
-	err = app.setupDomainServices()
+	err = a.setupDomainServices()
 	if err != nil {
 		return err
 	}
-	app.logger.Infof("domain services created")
+	a.logger.Infof("domain services created")
 
-	err = app.setupServer()
+	err = a.setupServer()
 	if err != nil {
 		return err
 	}
-	app.logger.Infof("http server created")
+	a.logger.Infof("http server created")
 
 	group, groupCtx := errgroup.WithContext(sigCtx)
 	// run the server
 	group.Go(func() error {
-		app.logger.Infof("server is starting: %s", app.httpServer.Addr)
+		a.logger.Infof("server is starting: %s", a.httpServer.Addr)
 		/**
 		When Shutdown is called, Serve, ListenAndServe, and
 		ListenAndServeTLS immediately return ErrServerClosed. Make sure the
 		program doesn't exit and waits instead for Shutdown to return.
 		*/
-		err := app.httpServer.ListenAndServe()
+		err := a.httpServer.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			app.logger.Errorf("failed to start server at %s. Error: %s", app.httpServer.Addr, err.Error())
+			a.logger.Errorf("failed to start server at %s. Error: %s", a.httpServer.Addr, err.Error())
 		}
 		return err
 	})
@@ -128,34 +128,34 @@ func (app *App) Run(sigCtx context.Context) error {
 	// graceful shutdown the web server
 	group.Go(func() error {
 		<-groupCtx.Done()
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(app.gracefulShutdownInterval)*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(a.gracefulShutdownInterval)*time.Second)
 		defer cancel()
-		app.logger.Infof("shutting down the server...")
-		err := app.httpServer.Shutdown(timeoutCtx)
+		a.logger.Infof("shutting down the server...")
+		err := a.httpServer.Shutdown(timeoutCtx)
 		if err != nil {
-			app.logger.Errorf("failed to shutdown the server %s. Error: %s", app.httpServer.Addr, err.Error())
+			a.logger.Errorf("failed to shutdown the server %s. Error: %s", a.httpServer.Addr, err.Error())
 		}
 		return err
 	})
 
-	defer app.onClose()
+	defer a.onClose()
 	return group.Wait()
 }
 
 // Close -
-func (app *App) Close() error {
-	app.onClose()
+func (a *App) Close() error {
+	a.onClose()
 	return nil
 }
 
-func (app *App) onClose() {
-	if app.closed {
+func (a *App) onClose() {
+	if a.closed {
 		return
 	}
-	for _, clbk := range app.onCloseCallbacks {
-		clbk(app)
+	for _, clbk := range a.onCloseCallbacks {
+		clbk(a)
 	}
-	app.closed = true
+	a.closed = true
 }
 
 func (a *App) setupLogger(cfg *config.Config) error {
@@ -213,86 +213,86 @@ func (a *App) setupDomainServices() error {
 	return nil
 }
 
-func (app *App) setupServer() error {
-	if app.cfg.AppHost == "" {
+func (a *App) setupServer() error {
+	if a.cfg.AppHost == "" {
 		return config.ErrConfigAppHostIsEmpty
 	}
 
 	h := handler.NewHandler(
-		app.logger,
-		*app.cfg,
-		app.auth,
-		app.orderService,
-		app.withdrawService,
-		app.balanceService,
+		a.logger,
+		*a.cfg,
+		a.auth,
+		a.orderService,
+		a.withdrawService,
+		a.balanceService,
 	)
-	routeHandler, err := router.NewRouter(h, app.logger, app.auth)
+	routeHandler, err := router.NewRouter(h, a.logger, a.auth)
 	if err != nil {
-		app.logger.Errorf("Router creating error: %s", err.Error())
+		a.logger.Errorf("Router creating error: %s", err.Error())
 		return err
 	}
 
 	srv := &http.Server{
-		Addr:         app.cfg.GetFullAddr(),
+		Addr:         a.cfg.GetFullAddr(),
 		Handler:      routeHandler,
 		WriteTimeout: 15 * time.Second,
 	}
 
-	app.httpServer = srv
+	a.httpServer = srv
 
 	return nil
 }
 
-func (app *App) connectDb(ctx context.Context) error {
-	if app.dsn == "" {
+func (a *App) connectDB(ctx context.Context) error {
+	if a.dsn == "" {
 		return config.ErrConfigDatabaseURIEmpty
 	}
 
 	// this Pings the database trying to connect
-	db, err := sqlx.ConnectContext(ctx, "postgres", app.dsn)
+	db, err := sqlx.ConnectContext(ctx, "postgres", a.dsn)
 	if err != nil {
-		app.logger.Errorf("database connection error %s", err.Error())
+		a.logger.Errorf("database connection error %s", err.Error())
 		return err
 	}
-	app.AddOnCloseCallback(func(a *App) { a.db.Close() })
-	app.db = db
+	a.AddOnCloseCallback(func(a *App) { a.db.Close() })
+	a.db = db
 
 	return nil
 }
 
-func (app *App) setupAuthService() error {
-	identityProvider, err := pg.NewIdentityProviderPg(app.db)
+func (a *App) setupAuthService() error {
+	identityProvider, err := pg.NewIdentityProviderPg(a.db)
 	if err != nil {
-		app.logger.Errorf("unable create identity provider: %s", err.Error())
+		a.logger.Errorf("unable create identity provider: %s", err.Error())
 		return err
 	}
 
 	hashAlgo, err := auth.NewHashAlgoBcrypt()
 	if err != nil {
-		app.logger.Errorf("unable initialize hash algo module: %s", err.Error())
+		a.logger.Errorf("unable initialize hash algo module: %s", err.Error())
 		return err
 	}
 
 	authService, err := auth.NewAuthService(auth.Opts{
 		IdentityProvider: identityProvider,
-		Logger:           app.logger,
+		Logger:           a.logger,
 		HashAlgo:         hashAlgo,
 		TokenCreate: func(martClaims *token.MartClaims, secretReader token.Secret) (newToken string, err error) {
 			return token.CreateToken(martClaims, secretReader, time.Now)
 		},
 		TokenParse: token.ParseWithClaims,
 		SecretReader: token.SecretFunc(func() (string, error) {
-			return app.appSecret, nil
+			return a.appSecret, nil
 		}),
 		NowTime: time.Now,
 	})
 
 	if err != nil {
-		app.logger.Errorf("unable to initialize auth service: %s", err.Error())
+		a.logger.Errorf("unable to initialize auth service: %s", err.Error())
 		return err
 	}
 
-	app.auth = authService
+	a.auth = authService
 
 	return nil
 }

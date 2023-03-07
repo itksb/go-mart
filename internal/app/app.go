@@ -8,6 +8,9 @@ import (
 	"github.com/itksb/go-mart/internal/router"
 	"github.com/itksb/go-mart/internal/service/auth"
 	"github.com/itksb/go-mart/internal/service/auth/token"
+	"github.com/itksb/go-mart/internal/service/balance"
+	"github.com/itksb/go-mart/internal/service/order"
+	"github.com/itksb/go-mart/internal/service/withdraw"
 	"github.com/itksb/go-mart/internal/storage/pg"
 	"github.com/itksb/go-mart/migrate"
 	"github.com/itksb/go-mart/pkg/logger"
@@ -29,6 +32,9 @@ type App struct {
 	httpServer               *http.Server
 	logger                   logger.Interface
 	auth                     *auth.Service
+	orderService             *order.Service
+	withdrawService          *withdraw.Service
+	balanceService           *balance.Service
 	onCloseCallbacks         []OnCloseCallback
 	db                       *sqlx.DB
 	gracefulShutdownInterval time.Duration //seconds
@@ -90,6 +96,12 @@ func (app *App) Run(sigCtx context.Context) error {
 		return err
 	}
 	app.logger.Infof("auth service created")
+
+	err = app.setupDomainServices()
+	if err != nil {
+		return err
+	}
+	app.logger.Infof("domain services created")
 
 	err = app.setupServer()
 	if err != nil {
@@ -169,12 +181,51 @@ func (a *App) setupLogger(cfg *config.Config) error {
 
 }
 
+func (a *App) setupDomainServices() error {
+	orderRep, err := pg.NewOrderRepositoryPg(a.db)
+	if err != nil {
+		return err
+	}
+	a.orderService, err = order.NewOrderService(orderRep)
+	if err != nil {
+		return err
+	}
+
+	balanceRep, err := pg.NewBalanceRepositoryPg(a.db)
+	if err != nil {
+		return err
+	}
+	a.balanceService, err = balance.NewBalanceService(balanceRep)
+	if err != nil {
+		return err
+	}
+
+	withdrawRep, err := pg.NewWithdrawRepositoryPg(a.db)
+	if err != nil {
+		return err
+	}
+
+	a.withdrawService, err = withdraw.NewWithdrawService(withdrawRep, balanceRep)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (app *App) setupServer() error {
 	if app.cfg.AppHost == "" {
 		return config.ErrConfigAppHostIsEmpty
 	}
 
-	h := handler.NewHandler(app.logger, *app.cfg, app.auth)
+	h := handler.NewHandler(
+		app.logger,
+		*app.cfg,
+		app.auth,
+		app.orderService,
+		app.withdrawService,
+		app.balanceService,
+	)
 	routeHandler, err := router.NewRouter(h, app.logger, app.auth)
 	if err != nil {
 		app.logger.Errorf("Router creating error: %s", err.Error())

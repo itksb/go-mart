@@ -3,7 +3,7 @@
 CREATE
 EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE users
+CREATE TABLE IF NOT EXISTS users
 (
     id            uuid PRIMARY KEY default uuid_generate_v4() NOT NULL,
     login         character varying(60)                       NOT NULL,

@@ -4,7 +4,7 @@ import "time"
 
 // OrderLoadRequest - Загрузка номера заказа
 type OrderLoadRequest struct {
-	Value string
+	Number string
 }
 
 // Получение списка загруженных номеров заказов

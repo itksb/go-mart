@@ -1,4 +1,4 @@
-package router
+package middleware
 
 import (
 	"compress/gzip"
@@ -17,7 +17,7 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func gzipMiddleware(next http.Handler) http.Handler {
+func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// проверяем, что клиент поддерживает gzip-сжатие
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
@@ -42,7 +42,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func gzipUnpackMiddleware(next http.Handler) http.Handler {
+func GzipUnpackMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// переменная reader будет равна r.Body или *gzip.Reader
 		var reader io.ReadCloser

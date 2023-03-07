@@ -1,4 +1,4 @@
-package router
+package middleware
 
 import (
 	"context"
@@ -41,12 +41,4 @@ func NewAuthMiddleware(authSrv *auth.Service, l logger.Interface) func(http.Hand
 				next.ServeHTTP(w, r.WithContext(ctx))
 			})
 	}
-}
-
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(ctxUser).(string)
-	if !ok {
-		return "", false
-	}
-	return userID, true
 }

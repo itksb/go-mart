@@ -3,12 +3,13 @@ package domain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
+// Withdraw - Запрос на списание средств
 type Withdraw struct {
-	ID          string    `json:"-"`
-	OrderNumber string    `json:"order"`
+	OrderID     string    `json:"order"`
 	Amount      float64   `json:"sum"`
 	UserID      string    `json:"-"`
 	ProcessedAt time.Time `json:"processed_at"`
@@ -17,8 +18,9 @@ type Withdraw struct {
 type WithdrawRepositoryInterface interface {
 	Create(ctx context.Context, orderID string, amount float64, userID string) (*Withdraw, error)
 	FindAllByUserID(ctx context.Context, userID string) ([]*Withdraw, error)
-	SumWithdrawnByUserID(ctx context.Context, userID string) (float64, error)
 }
+
+var ErrWithdrawNotEnoughBalance = errors.New("withdraw not enough balance")
 
 func (w Withdraw) MarshalJSON() ([]byte, error) {
 	type WithdrawAlias Withdraw

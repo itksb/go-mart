@@ -31,3 +31,6 @@ goose postgres "host=localhost user=user password=password dbname=postgres sslmo
 
 curl -i -X POST -d '{"login": "legat", "password": "legat"}' http://localhost:8000/api/user/register
 curl -i -X POST -d '{"login": "legat", "password": "legat"}' http://localhost:8000/api/user/login
+
+curl -i -X POST -d 18 -H "Authorization: Bearer YOUR TOKEN HERE" http://localhost:8000/api/user/orders
+curl -i  -H "Authorization: Bearer TOKEN" http://localhost:8000/api/user/withdrawals

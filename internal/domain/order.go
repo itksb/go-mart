@@ -25,10 +25,10 @@ type Order struct {
 }
 
 type OrderRepositoryInterface interface {
-	Create(ctx context.Context, ID string, userID string) (Order, error)
+	Create(ctx context.Context, ID string, userID string) (*Order, error)
 	FindByID(ctx context.Context, ID string) (*Order, error)
 	FindAllByUserID(ctx context.Context, ID string) ([]*Order, error)
-	AccrueByID(ctx context.Context, ID string, status OrderStatus, accrual float64) (*Order, error)
+	MakeAccrualForOrder(ctx context.Context, ID string, status OrderStatus, accrual float64) (*Order, error)
 }
 
 var ErrDomainDuplicateOrder = errors.New("duplicate key value")

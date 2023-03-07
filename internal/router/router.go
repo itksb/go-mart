@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/itksb/go-mart/internal/handler"
+	"github.com/itksb/go-mart/internal/middleware"
 	"github.com/itksb/go-mart/internal/service/auth"
 	"github.com/itksb/go-mart/pkg/logger"
 	"net/http"
@@ -14,12 +15,12 @@ func NewRouter(
 	authServ *auth.Service,
 ) (http.Handler, error) {
 	r := chi.NewRouter()
-	r.Use(gzipUnpackMiddleware)
+	r.Use(middleware.GzipUnpackMiddleware)
 	// auth middleware here...
-	r.Use(gzipMiddleware)
+	r.Use(middleware.GzipMiddleware)
 
-	corsHandler := NewCors()
-	authMiddleware := NewAuthMiddleware(authServ, l)
+	corsHandler := middleware.NewCors()
+	authMiddleware := middleware.NewAuthMiddleware(authServ, l)
 
 	r.Route("/api/user", func(r2 chi.Router) {
 		// apply CORS middleware for api routes
@@ -29,13 +30,11 @@ func NewRouter(
 
 		r2.Group(func(r3 chi.Router) {
 			r3.Use(authMiddleware)
-			//r3.Post("/orders", orderHandler.PostUserOrder())
-			/*
-				r3.Get("/orders", orderHandler.GetUserOrders())
-				r3.Get("/balance", balanceHandler.GetUserSummary())
-				r3.Post("/balance/withdraw", withdrawHandler.PostUserBalanceWithdraw())
-				r3.Get("/withdrawals", withdrawHandler.GetUserWithdrawals())
-			*/
+			r3.Post("/orders", h.APIOrderLoad)
+			r3.Get("/orders", h.APIGetOrders)
+			r3.Post("/balance/withdraw", h.APIWithdraw)
+			r3.Get("/withdrawals", h.APIWithdrawals)
+			r3.Get("/balance", h.APIGetUserSum)
 		})
 	})
 

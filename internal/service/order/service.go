@@ -4,44 +4,47 @@ import (
 	"context"
 	"errors"
 	"github.com/itksb/go-mart/internal/domain"
+	"github.com/itksb/go-mart/internal/service/order/luhn"
 )
 
-type Order struct {
+type Service struct {
 	db domain.OrderRepositoryInterface
 }
 
-func NewOrderService(db domain.OrderRepositoryInterface) *Order {
-	return &Order{db: db}
+func NewOrderService(db domain.OrderRepositoryInterface) (*Service, error) {
+	return &Service{db: db}, nil
 }
 
-func (o *Order) Create(ctx context.Context, orderID string, userID string) (*domain.Order, error) {
+func (o *Service) Create(ctx context.Context, orderID string, userID string) (*domain.Order, error) {
+	if !luhn.Valid(orderID) {
+		return nil, ErrOrderIncorrectOrderNumber
+	}
 	order, err := o.db.Create(ctx, orderID, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrDomainDuplicateOrder) {
-			foundOrder, foundErr := o.db.FindByID(ctx, orderID)
-			if foundErr != nil {
-				return nil, foundErr
+			orderFromDB, err2 := o.db.FindByID(ctx, orderID)
+			if err2 != nil {
+				return nil, err2
 			}
-			if foundOrder.UserID == userID {
-				return nil, ErrAlreadyUploaded
+			if orderFromDB.UserID == userID {
+				return nil, ErrOrderAlreadyCreatedByCurUser
 			}
-			return nil, ErrAlreadyUploadedByAnother
+			return nil, ErrOrderAlreadyCreatedByAnotherUser
 		}
 		return nil, err
 	}
 
-	_ = o.rabbitmq.Publish(ctx, []byte(order.Number))
 	return order, nil
 }
 
-func (o *Order) FindByNumber(ctx context.Context, number string) (*model.Order, error) {
-	return o.orders.FindByNumber(ctx, number)
+func (o *Service) FindByID(ctx context.Context, ID string) (*domain.Order, error) {
+	return o.db.FindByID(ctx, ID)
 }
 
-func (o *Order) FindAllByUserUUID(ctx context.Context, userUUID string) ([]*model.Order, error) {
-	return o.orders.FindAllByUserUUID(ctx, userUUID)
+func (o *Service) FindAllByUserID(ctx context.Context, userID string) ([]*domain.Order, error) {
+	return o.db.FindAllByUserID(ctx, userID)
 }
 
-func (o *Order) AccrueByNumber(ctx context.Context, number string, status model.OrderStatus, accrual float64) (*model.Order, error) {
-	return o.orders.AccrueByNumber(ctx, number, status, accrual)
+func (o *Service) MakeAccrualForOrder(ctx context.Context, orderID string, status domain.OrderStatus, accrual float64) (*domain.Order, error) {
+	return o.db.MakeAccrualForOrder(ctx, orderID, status, accrual)
 }

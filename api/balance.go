@@ -10,8 +10,8 @@ type BalanceResponse struct {
 }
 
 type BalanceWithdrawRequest struct {
-	Order string `json:"order"`
-	Sum   int    `json:"sum"`
+	Order string  `json:"order"`
+	Sum   float64 `json:"sum"`
 }
 
 // Получение информации о выводе средств

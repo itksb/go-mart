@@ -31,12 +31,11 @@ func (w *WithdrawRepositoryPg) Create(ctx context.Context, orderID string, amoun
 	}
 	defer tx.Rollback()
 
-	err = tx.QueryRow(
+	_, err = tx.Exec(
 		"UPDATE users SET balance = balance - $1 where id = $2",
 		amount,
 		userID,
-	).Err()
-
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +53,8 @@ func (w *WithdrawRepositoryPg) Create(ctx context.Context, orderID string, amoun
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates") {
 			return nil, fmt.Errorf("order already exists. %w. %s", domain.ErrDomainDuplicateOrder, err.Error())
+		} else {
+			return nil, err
 		}
 	}
 

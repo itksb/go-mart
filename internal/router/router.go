@@ -33,6 +33,7 @@ func NewRouter(
 			r3.Post("/orders", h.APIOrderLoad)
 			r3.Get("/orders", h.APIGetOrders)
 			r3.Post("/balance/withdraw", h.APIWithdraw)
+			r3.Get("/balance/withdrawals", h.APIWithdrawals)
 			r3.Get("/withdrawals", h.APIWithdrawals)
 			r3.Get("/balance", h.APIGetUserSum)
 		})

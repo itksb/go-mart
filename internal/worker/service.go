@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -27,6 +28,9 @@ type AccrualResponse struct {
 }
 
 func NewAccrualWorker(accrualURL string, db *WorkerStorage, l logger.Interface) (*AccrualWorker, error) {
+	if !strings.HasPrefix(accrualURL, "http://") && !strings.HasPrefix(accrualURL, "https://") {
+		accrualURL = "http://" + accrualURL
+	}
 	return &AccrualWorker{
 		url: accrualURL,
 		db:  db,
@@ -49,7 +53,9 @@ func (a *AccrualWorker) Run(ctx context.Context) error {
 					return err
 				}
 				for _, order := range orders {
-					req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/orders/%s", a.url, order.ID), nil)
+					urlToCheckAccrual := fmt.Sprintf("%s/api/orders/%s", a.url, order.ID)
+					a.l.Infof("Worker. accrual request: %s", urlToCheckAccrual)
+					req, err := http.NewRequest(http.MethodGet, urlToCheckAccrual, nil)
 					if err != nil {
 						a.l.Errorf("Worker. http.NewRequest creating error, %s", err)
 						continue
@@ -64,7 +70,7 @@ func (a *AccrualWorker) Run(ctx context.Context) error {
 						a.l.Errorf("Worker. %s", err)
 						continue
 					}
-					defer res.Body.Close()
+					res.Body.Close()
 
 					if res.StatusCode == http.StatusTooManyRequests {
 						t, err := time.ParseDuration(res.Header.Get("Retry-After") + "s")
@@ -82,6 +88,7 @@ func (a *AccrualWorker) Run(ctx context.Context) error {
 							continue
 						}
 					}
+					a.l.Infof("Worker. accrual response: %s StatusCode: %d", resBytes, res.StatusCode)
 
 					if res.StatusCode == http.StatusOK {
 						if accrualResponse.Status == order.Status {
